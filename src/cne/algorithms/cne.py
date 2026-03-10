@@ -1,4 +1,7 @@
-"""Neighbor Expansion (NE) edge partitioning algorithm."""
+"""Constrained Neighbor Expansion (CNE) edge partitioning algorithm.
+
+This module implements the existing multi-source synchronized expansion strategy.
+"""
 
 from __future__ import annotations
 
@@ -89,14 +92,14 @@ def _edges_connected(edge_set: Set[frozenset], edge_adj: Dict[frozenset, Set[fro
     return len(visited) == len(edge_set)
 
 
-def neighbor_expansion_partition(
+def cne_partition(
     graph: nx.Graph,
     k: int,
     weight: str = "weight",
     seed_edges: Optional[List[Tuple]] = None,
     refine_iterations: int = 50,
 ) -> List[Set[frozenset]]:
-    """Partition graph edges into k balanced connected groups using NE strategy."""
+    """Partition edges into k balanced connected groups using CNE multi-source expansion."""
     n_edges = graph.number_of_edges()
     if n_edges == 0:
         return [set() for _ in range(k)]
@@ -204,3 +207,8 @@ def neighbor_expansion_partition(
             break
 
     return partitions
+
+
+# Backward-compatible alias.
+neighbor_expansion_partition = cne_partition
+

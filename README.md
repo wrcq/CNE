@@ -1,29 +1,26 @@
-# CNE Project
+# CNE
 
-Edge-based road-network partitioning toolkit with a modular project layout.
+Road-network edge partitioning toolkit based on neighbor expansion ideas.
 
-## Project Structure
+## Project Layout
 
 ```text
-CNE_project/
-  algorithms/
-    ne.py                  # Multi-source synchronized NE algorithm
-    cne.py                 # Placeholder for future constrained variants
-  utils/
-    graph_utils.py         # Edge ID/load/adjacency/connectivity helpers
-    metrics.py             # Partition statistics
-  visualization/
-    plot_partition.py      # Partition plotting utilities
-  experiments/
-    run_ne_demo.py         # Demo entrypoint
-  data/                    # Reserved for datasets
+CNE/
+  main.py
+  scripts/
+    demo_grid.py
+    demo_random.py
+    compare_k.py
+  src/cne/
+    algorithms/
+      cne.py               # Multi-source synchronized expansion
+      ne.py                # Single-source sequential expansion
+    analysis/
+    graph/
+    utils/
+    viz/
+  tests/
 ```
-
-Legacy entrypoints are kept for compatibility:
-
-- `ne_algorithm.py` -> re-exports from new modules
-- `visualize.py` -> re-exports `draw_partitioned_graph`
-- `demo.py` -> calls new demo entrypoint
 
 ## Install
 
@@ -31,56 +28,50 @@ Legacy entrypoints are kept for compatibility:
 pip install -r requirements.txt
 ```
 
-## Run Demo
+## Run
 
-Recommended:
-
-```bash
-python -m CNE_project.experiments.run_demo
-```
-
-Switch algorithm by argument:
+Run all demos:
 
 ```bash
-python -m CNE_project.experiments.run_cne_demo --algo cne
-python -m CNE_project.experiments.run_cne_demo --algo ne
-python -m CNE_project.experiments.run_demo --algo cne
-python -m CNE_project.experiments.run_demo --algo ne
+python main.py
 ```
 
-Compatibility (still works):
+Run a single demo:
 
 ```bash
-python demo.py
+python scripts/demo_grid.py
+python scripts/demo_random.py
+python scripts/compare_k.py
 ```
-
-Outputs are saved to:
-
-- `output/result_grid_<algo>.png`
-- `output/result_random_<algo>.png`
 
 ## Core API
 
 ```python
-from CNE_project.algorithms.ne import neighbor_expansion_partition
-from CNE_project.utils.metrics import partition_stats
+from cne.algorithms import cne_partition, ne_partition
+from cne.analysis import partition_stats
 ```
 
-Main function:
+Available partition APIs:
 
-- `neighbor_expansion_partition(graph, k, weight="weight", seed_edges=None, refine_iterations=50)`
+- `cne_partition(graph, k, weight="weight", seed_edges=None, refine_iterations=50)`
+- `ne_partition(graph, k, weight="weight", seed_edges=None, refine_iterations=50)`
 
-Algorithm behavior:
+Behavior:
 
-1. Select edge seeds.
-2. Perform multi-source synchronized expansion (low-load partition expands first).
-3. Refine by moving boundary edges while preserving connectivity.
+1. `cne_partition`: multi-source synchronized expansion (lighter partitions expand first).
+2. `ne_partition`: single-source sequential expansion (one source grows near target load, then moves to next source).
 
-## Add New Algorithms
+## Migration Notes
 
-1. Add a new file in `CNE_project/algorithms/` (for example `my_algo.py`).
-2. Reuse helpers from `CNE_project/utils/graph_utils.py`.
-3. Add evaluation logic using `CNE_project/utils/metrics.py`.
-4. Add an experiment script in `CNE_project/experiments/`.
+Old module `src/cne/algorithms/neighbor_expansion.py` has been migrated to `src/cne/algorithms/cne.py`.
 
-`cne.py` already exists as an extension point for constrained NE variants.
+Compatibility alias is still provided:
+
+- `neighbor_expansion_partition` -> `cne_partition`
+
+Recommended new imports:
+
+```python
+from cne.algorithms import cne_partition
+from cne.algorithms import ne_partition
+```

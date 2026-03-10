@@ -10,7 +10,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from cne.algorithms import neighbor_expansion_partition
+from cne.algorithms import cne_partition
 from cne.analysis import partition_stats
 from cne.graph import build_grid_road_network
 
@@ -22,7 +22,7 @@ def main():
 
     graph = build_grid_road_network(5, 6)
     for k in [2, 3, 4, 5]:
-        partitions = neighbor_expansion_partition(graph, k=k)
+        partitions = cne_partition(graph, k=k)
         stats = partition_stats(graph, partitions)
         loads_str = ", ".join(f"{l:.1f}" for l in stats["loads"])
         print(

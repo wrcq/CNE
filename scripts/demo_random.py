@@ -14,7 +14,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from cne.algorithms import neighbor_expansion_partition
+from cne.algorithms import cne_partition
 from cne.analysis import partition_stats
 from cne.graph import build_random_road_network
 from cne.viz import draw_partitioned_graph
@@ -30,7 +30,7 @@ def main():
     print(f"节点数: {graph.number_of_nodes()}, 边数: {graph.number_of_edges()}")
     print(f"总负载: {total_load:.1f}")
 
-    partitions = neighbor_expansion_partition(graph, k=4)
+    partitions = cne_partition(graph, k=4)
     stats = partition_stats(graph, partitions)
     print(f"  各子图负载: {[f'{l:.1f}' for l in stats['loads']]}")
     print(f"  不均衡度: {stats['max_imbalance']:.2%}, 共享节点: {stats['shared_nodes']}")

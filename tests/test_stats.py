@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from cne.algorithms import neighbor_expansion_partition
+from cne.algorithms import cne_partition
 from cne.analysis import partition_stats
 from cne.graph import build_grid_road_network
 
 
 def test_partition_stats_shape_and_ranges():
     graph = build_grid_road_network(rows=4, cols=4, seed=3)
-    partitions = neighbor_expansion_partition(graph, k=3)
+    partitions = cne_partition(graph, k=3)
     stats = partition_stats(graph, partitions)
 
     assert len(stats["loads"]) == 3
