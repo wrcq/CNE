@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -16,13 +17,34 @@ from cne.graph import build_grid_road_network
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Compare competitive CNE balance across K")
+    parser.add_argument("--alpha", type=float, default=1.0, help="weight for scale/load term")
+    parser.add_argument("--beta", type=float, default=1.0, help="weight for distance term")
+    parser.add_argument(
+        "--overload-threshold",
+        type=float,
+        default=1.2,
+        help="relative load intensity threshold for gating overloaded partitions",
+    )
+    args = parser.parse_args()
+
     print("=" * 60)
     print("示例 3: 不同 K 值对比 (网格路网)")
     print("=" * 60)
+    print(
+        f"参数: alpha={args.alpha}, beta={args.beta}, "
+        f"lambda={args.overload_threshold}"
+    )
 
     graph = build_grid_road_network(5, 6)
     for k in [2, 3, 4, 5]:
-        partitions = cne_partition(graph, k=k)
+        partitions = cne_partition(
+            graph,
+            k=k,
+            alpha=args.alpha,
+            beta=args.beta,
+            overload_threshold=args.overload_threshold,
+        )
         stats = partition_stats(graph, partitions)
         loads_str = ", ".join(f"{l:.1f}" for l in stats["loads"])
         print(

@@ -45,7 +45,9 @@ def draw_partitioned_graph(
     figsize: tuple = (14, 10),
     node_size: int = 250,
     edge_width_scale: float = 2.0,
-    show_edge_labels: bool = True,
+    show_edge_labels: bool = False,
+    show_node_labels: bool = False,
+    show_nodes: bool = False,
     save_path: Optional[str] = None,
 ):
     """Draw partitioned graph where each partition has a distinct edge color."""
@@ -79,7 +81,7 @@ def draw_partitioned_graph(
 
         if part_idx >= 0:
             color = colors[part_idx]
-            ax.plot(x, y, color=color, linewidth=max(1.5, w * edge_width_scale), alpha=0.8, solid_capstyle="round", zorder=1)
+            ax.plot(x, y, color=color, linewidth=max(1.5, edge_width_scale), alpha=0.8, solid_capstyle="round", zorder=1)
         else:
             ax.plot(x, y, color="#aaaaaa", linewidth=1, alpha=0.3, linestyle=":", zorder=1)
 
@@ -97,53 +99,38 @@ def draw_partitioned_graph(
                 zorder=4,
             )
 
-    for node in graph.nodes():
-        x, y = pos[node]
-        parts = sorted(node_parts.get(node, set()))
+    if show_nodes:
+        for node in graph.nodes():
+            x, y = pos[node]
+            parts = sorted(node_parts.get(node, set()))
 
-        if len(parts) == 0:
-            ax.scatter(x, y, s=node_size, c="#cccccc", edgecolors="white", linewidths=1.5, zorder=3)
-        elif len(parts) == 1:
-            ax.scatter(x, y, s=node_size, c=colors[parts[0]], edgecolors="white", linewidths=1.5, zorder=3)
-        else:
-            n_parts = len(parts)
-            theta_start = 90
-            for idx, p in enumerate(parts):
-                wedge = mpatches.Wedge(
-                    (x, y),
-                    _node_radius(ax, node_size, figsize),
-                    theta_start + idx * 360 / n_parts,
-                    theta_start + (idx + 1) * 360 / n_parts,
-                    facecolor=colors[p],
-                    edgecolor="white",
-                    linewidth=1.5,
-                    zorder=3,
-                    transform=ax.transData,
-                )
-                ax.add_patch(wedge)
+            if len(parts) == 0:
+                ax.scatter(x, y, s=node_size, c="#cccccc", edgecolors="white", linewidths=1.5, zorder=3)
+            elif len(parts) == 1:
+                ax.scatter(x, y, s=node_size, c=colors[parts[0]], edgecolors="white", linewidths=1.5, zorder=3)
+            else:
+                n_parts = len(parts)
+                theta_start = 90
+                for idx, p in enumerate(parts):
+                    wedge = mpatches.Wedge(
+                        (x, y),
+                        _node_radius(ax, node_size, figsize),
+                        theta_start + idx * 360 / n_parts,
+                        theta_start + (idx + 1) * 360 / n_parts,
+                        facecolor=colors[p],
+                        edgecolor="white",
+                        linewidth=1.5,
+                        zorder=3,
+                        transform=ax.transData,
+                    )
+                    ax.add_patch(wedge)
 
-    nx.draw_networkx_labels(graph, pos, font_size=8, font_color="white", font_weight="bold", ax=ax)
+    if show_node_labels:
+        nx.draw_networkx_labels(graph, pos, font_size=8, font_color="white", font_weight="bold", ax=ax)
 
     legend_handles = []
-    for i, part in enumerate(partitions):
-        load = sum(edge_load(graph, *e, weight) for e in part)
-        label = f"子图 {i}  |  {len(part)} 条边  |  负载 {load:.1f}"
-        legend_handles.append(mpatches.Patch(color=colors[i], label=label))
-
-    shared_count = sum(1 for n in graph.nodes() if len(node_parts.get(n, set())) > 1)
-    if shared_count > 0:
-        legend_handles.append(
-            plt.Line2D(
-                [0],
-                [0],
-                marker="o",
-                color="w",
-                markerfacecolor="#888888",
-                markeredgecolor="black",
-                markersize=8,
-                label=f"共享节点: {shared_count} 个",
-            )
-        )
+    for i, _ in enumerate(partitions):
+        legend_handles.append(mpatches.Patch(color=colors[i], label=f"子图 {i}"))
 
     ax.legend(handles=legend_handles, loc="upper left", fontsize=9, framealpha=0.9, edgecolor="#cccccc")
     ax.axis("off")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -34,6 +35,17 @@ def print_stats(graph, partitions, label=""):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Grid demo for competitive CNE partitioning")
+    parser.add_argument("--alpha", type=float, default=1.0, help="weight for scale/load term")
+    parser.add_argument("--beta", type=float, default=1.0, help="weight for distance term")
+    parser.add_argument(
+        "--overload-threshold",
+        type=float,
+        default=1.2,
+        help="relative load intensity threshold for gating overloaded partitions",
+    )
+    args = parser.parse_args()
+
     print("=" * 60)
     print("示例 1: 5x6 网格路网 -> 边分割为 3 个子图")
     print("=" * 60)
@@ -43,8 +55,21 @@ def main():
     print(f"节点数: {graph.number_of_nodes()}, 边数: {graph.number_of_edges()}")
     print(f"总负载: {total_load:.1f}")
 
-    partitions = cne_partition(graph, k=3)
-    print_stats(graph, partitions, "(网格路网, K=3)")
+    partitions = cne_partition(
+        graph,
+        k=3,
+        alpha=args.alpha,
+        beta=args.beta,
+        overload_threshold=args.overload_threshold,
+    )
+    print_stats(
+        graph,
+        partitions,
+        (
+            f"(网格路网, K=3, alpha={args.alpha}, beta={args.beta}, "
+            f"lambda={args.overload_threshold})"
+        ),
+    )
 
     pos = {i: (i % 6, -(i // 6)) for i in graph.nodes()}
     draw_partitioned_graph(

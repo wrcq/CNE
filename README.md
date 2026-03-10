@@ -13,7 +13,7 @@ CNE/
     compare_k.py
   src/cne/
     algorithms/
-      cne.py               # Multi-source synchronized expansion
+      cne.py               # Competitive multi-source synchronized expansion
       ne.py                # Single-source sequential expansion
     analysis/
     graph/
@@ -53,13 +53,41 @@ from cne.analysis import partition_stats
 
 Available partition APIs:
 
-- `cne_partition(graph, k, weight="weight", seed_edges=None, refine_iterations=50)`
+- `cne_partition(graph, k, weight="weight", seed_edges=None, refine_iterations=50, alpha=1.0, beta=1.0, overload_threshold=1.2)`
 - `ne_partition(graph, k, weight="weight", seed_edges=None, refine_iterations=50)`
 
 Behavior:
 
-1. `cne_partition`: multi-source synchronized expansion (lighter partitions expand first).
+1. `cne_partition`: competitive multi-source synchronized expansion.
 2. `ne_partition`: single-source sequential expansion (one source grows near target load, then moves to next source).
+
+Competitive CNE cost for assigning candidate edge `e` to subgraph `G_i`:
+
+```math
+J(e,G_i) = \alpha \hat{J}_{\mathrm{scale}}(G_i) + \beta \hat{J}_{\mathrm{dist}}(e,G_i)
+```
+
+- `\hat{J}_{\mathrm{scale}}`: normalized scale/load term (larger-load partitions are penalized)
+- `\hat{J}_{\mathrm{dist}}`: normalized Euclidean distance between edge center and seed-edge center
+- `alpha`, `beta`: trade-off between load balancing and spatial compactness
+
+Load-gating operator for suppressing top-heavy growth:
+
+```math
+\sigma_i = \frac{S(G_i)}{\bar{S}_t},\quad \bar{S}_t=\frac{1}{K}\sum_{j=1}^{K}S(G_j)
+```
+
+If `\sigma_i > overload_threshold` (default `1.2`), partition `G_i` is treated as temporarily overloaded and excluded from candidate competition when non-overloaded alternatives exist. If all adjacent candidates are overloaded, the edge is assigned to the currently lightest adjacent partition.
+
+When an edge is adjacent to multiple subgraphs at the same expansion round, it is assigned to the subgraph with minimum competitive cost.
+
+Demo parameters:
+
+```bash
+python scripts/demo_grid.py --alpha 1.0 --beta 1.0 --overload-threshold 1.2
+python scripts/demo_random.py --alpha 0.8 --beta 1.2 --overload-threshold 1.2
+python scripts/compare_k.py --alpha 1.5 --beta 0.5 --overload-threshold 1.2
+```
 
 ## Migration Notes
 
