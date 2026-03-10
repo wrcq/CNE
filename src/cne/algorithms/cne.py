@@ -13,6 +13,11 @@ import networkx as nx
 from cne.utils.edge import edge_id, edge_load
 
 
+def _edge_sort_key(edge: frozenset) -> Tuple[Any, ...]:
+    """Deterministic ordering key for edge ids represented by frozenset."""
+    return tuple(sorted(edge))
+
+
 def _build_edge_adjacency(graph: nx.Graph) -> Dict[frozenset, Set[frozenset]]:
     """Build edge adjacency where two edges are adjacent if they share a node."""
     adj: Dict[frozenset, Set[frozenset]] = {}
@@ -75,6 +80,158 @@ def _select_seed_edges(
             break
         seeds.append(best_edge)
     return seeds
+
+
+def _select_seed_edges_kmedoids(
+    graph: nx.Graph,
+    edge_adj: Dict[frozenset, Set[frozenset]],
+    k: int,
+    positions: Dict[Any, Tuple[float, float]],
+    weight: str,
+    max_iter: int = 50,
+) -> List[frozenset]:
+    """Pick k seed edges using k-medoids over edge-center Euclidean distance."""
+    all_edges = sorted(edge_adj.keys(), key=_edge_sort_key)
+    if k >= len(all_edges):
+        return all_edges[:k]
+
+    edge_centers = {eid: _edge_center(eid, positions) for eid in all_edges}
+
+    def _dist(e1: frozenset, e2: frozenset) -> float:
+        return _euclidean(edge_centers[e1], edge_centers[e2])
+
+    # Deterministic farthest-point initialization from the heaviest edge.
+    medoids: List[frozenset] = [max(all_edges, key=lambda e: edge_load(graph, *e, weight))]
+    while len(medoids) < k:
+        candidates = [e for e in all_edges if e not in medoids]
+        if not candidates:
+            break
+        best = max(candidates, key=lambda e: min(_dist(e, m) for m in medoids))
+        medoids.append(best)
+
+    for _ in range(max_iter):
+        clusters: Dict[frozenset, List[frozenset]] = {m: [] for m in medoids}
+
+        for e in all_edges:
+            winner = min(
+                medoids,
+                key=lambda m: (_dist(e, m), _edge_sort_key(m)),
+            )
+            clusters[winner].append(e)
+
+        updated_medoids: List[frozenset] = []
+        used = set()
+        for m in medoids:
+            members = clusters.get(m, [])
+            if not members:
+                remain = [e for e in all_edges if e not in used and e not in updated_medoids]
+                if not remain:
+                    continue
+                refill = max(
+                    remain,
+                    key=lambda e: min(_dist(e, um) for um in updated_medoids) if updated_medoids else 0.0,
+                )
+                updated_medoids.append(refill)
+                used.add(refill)
+                continue
+
+            best_member = min(
+                members,
+                key=lambda c: (
+                    sum(_dist(c, other) for other in members),
+                    _edge_sort_key(c),
+                ),
+            )
+            if best_member in used:
+                alt = [x for x in members if x not in used]
+                if alt:
+                    best_member = min(
+                        alt,
+                        key=lambda c: (
+                            sum(_dist(c, other) for other in members),
+                            _edge_sort_key(c),
+                        ),
+                    )
+            updated_medoids.append(best_member)
+            used.add(best_member)
+
+        if len(updated_medoids) < k:
+            remain = [e for e in all_edges if e not in used]
+            while len(updated_medoids) < k and remain:
+                refill = max(
+                    remain,
+                    key=lambda e: min(_dist(e, um) for um in updated_medoids) if updated_medoids else 0.0,
+                )
+                updated_medoids.append(refill)
+                used.add(refill)
+                remain = [e for e in all_edges if e not in used]
+
+        updated_medoids = sorted(updated_medoids[:k], key=_edge_sort_key)
+        if updated_medoids == sorted(medoids, key=_edge_sort_key):
+            medoids = updated_medoids
+            break
+        medoids = updated_medoids
+
+    # Final output adjustment: choose edge nearest to cluster geometric centroid.
+    final_clusters: Dict[frozenset, List[frozenset]] = {m: [] for m in medoids}
+    for e in all_edges:
+        winner = min(
+            medoids,
+            key=lambda m: (_dist(e, m), _edge_sort_key(m)),
+        )
+        final_clusters[winner].append(e)
+
+    centroid_seeds: List[frozenset] = []
+    used_out = set()
+    for m in medoids:
+        members = final_clusters.get(m, [])
+        if not members:
+            continue
+        cx = sum(edge_centers[e][0] for e in members) / len(members)
+        cy = sum(edge_centers[e][1] for e in members) / len(members)
+        best = min(
+            members,
+            key=lambda e: (_euclidean(edge_centers[e], (cx, cy)), _edge_sort_key(e)),
+        )
+        if best in used_out:
+            alt = [e for e in members if e not in used_out]
+            if alt:
+                best = min(
+                    alt,
+                    key=lambda e: (_euclidean(edge_centers[e], (cx, cy)), _edge_sort_key(e)),
+                )
+        centroid_seeds.append(best)
+        used_out.add(best)
+
+    if len(centroid_seeds) < k:
+        remain = [e for e in all_edges if e not in used_out]
+        while len(centroid_seeds) < k and remain:
+            refill = max(
+                remain,
+                key=lambda e: min(_dist(e, s) for s in centroid_seeds) if centroid_seeds else 0.0,
+            )
+            centroid_seeds.append(refill)
+            used_out.add(refill)
+            remain = [e for e in all_edges if e not in used_out]
+
+    return sorted(centroid_seeds[:k], key=_edge_sort_key)
+
+
+def _select_seed_edges_by_strategy(
+    graph: nx.Graph,
+    edge_adj: Dict[frozenset, Set[frozenset]],
+    k: int,
+    weight: str,
+    strategy: str,
+    positions: Dict[Any, Tuple[float, float]],
+) -> List[frozenset]:
+    """Select seed edges according to configured strategy."""
+    key = strategy.strip().lower()
+    if key in {"bfs", "bfs-dispersed", "dispersed"}:
+        return _select_seed_edges(graph, edge_adj, k, weight)
+    if key in {"kmedoids", "k-medoids"}:
+        return _select_seed_edges_kmedoids(graph, edge_adj, k, positions, weight)
+    raise ValueError(f"Unknown seed strategy: {strategy}")
 
 
 def _edges_connected(edge_set: Set[frozenset], edge_adj: Dict[frozenset, Set[frozenset]]) -> bool:
@@ -140,6 +297,7 @@ def cne_partition(
     alpha: float = 1.0,
     beta: float = 1.0,
     overload_threshold: float = 1.2,
+    seed_strategy: str = "k-medoids",
 ) -> List[Set[frozenset]]:
     """Partition edges into k balanced connected groups using competitive CNE expansion.
 
@@ -148,7 +306,7 @@ def cne_partition(
 
     Admission gating by relative load intensity:
     ``sigma_i = S(G_i) / mean(S)``, and partitions with ``sigma_i > overload_threshold``
-    are temporarily excluded from competition when non-overloaded competitors exist.
+    are temporarily paused from proposal and edge competition until they fall below threshold.
     """
     n_edges = graph.number_of_edges()
     if n_edges == 0:
@@ -156,11 +314,19 @@ def cne_partition(
 
     k = min(k, n_edges)
     edge_adj = _build_edge_adjacency(graph)
+    positions = _resolve_node_positions(graph)
 
     if seed_edges is not None:
         seeds = [edge_id(u, v) for u, v in seed_edges]
     else:
-        seeds = _select_seed_edges(graph, edge_adj, k, weight)
+        seeds = _select_seed_edges_by_strategy(
+            graph,
+            edge_adj,
+            k,
+            weight,
+            strategy=seed_strategy,
+            positions=positions,
+        )
     assert len(seeds) == k, f"seed edge count ({len(seeds)}) must equal k ({k})"
 
     partitions: List[Set[frozenset]] = [set() for _ in range(k)]
@@ -170,7 +336,6 @@ def cne_partition(
         partitions[i].add(se)
         assigned.add(se)
 
-    positions = _resolve_node_positions(graph)
     edge_centers = {eid: _edge_center(eid, positions) for eid in edge_adj}
     seed_centers = {i: edge_centers[seeds[i]] for i in range(k)}
 
@@ -186,6 +351,7 @@ def cne_partition(
         mean_scale = (current_total / k) if k > 0 else 0.0
         scale_raw = [(ld / mean_scale) if mean_scale > 0 else 0.0 for ld in loads]
         sigma = scale_raw
+        frozen_by_overload = [s > overload_threshold for s in sigma]
         max_scale = max(scale_raw) if scale_raw else 0.0
         scale_norm = [(s / max_scale) if max_scale > 0 else 0.0 for s in scale_raw]
 
@@ -193,6 +359,9 @@ def cne_partition(
         edge_competitors: Dict[frozenset, Set[int]] = {}
         for idx in range(k):
             if not active[idx]:
+                continue
+            if frozen_by_overload[idx]:
+                # Hard gating: overloaded partition pauses expansion in this round.
                 continue
             for e in partitions[idx]:
                 for nb_e in edge_adj[e]:
@@ -207,6 +376,8 @@ def cne_partition(
         proposals: Dict[int, frozenset] = {}
         for idx in range(k):
             if not active[idx]:
+                continue
+            if frozen_by_overload[idx]:
                 continue
 
             best_edge = None
@@ -242,8 +413,10 @@ def cne_partition(
             else:
                 candidates = set(proposers)
 
-            non_overloaded = {i for i in candidates if sigma[i] <= overload_threshold}
-            gated_candidates = non_overloaded if non_overloaded else candidates
+            gated_candidates = {i for i in candidates if not frozen_by_overload[i]}
+            if not gated_candidates:
+                # No eligible partition can take this edge in this round.
+                continue
 
             dist_by_candidate = {
                 i: _euclidean(edge_centers[edge], seed_centers[i]) for i in gated_candidates
@@ -255,11 +428,7 @@ def cne_partition(
                 value = alpha * scale_norm[i] + beta * dist_norm
                 return (value, loads[i], i)
 
-            if non_overloaded:
-                winner = min(gated_candidates, key=_cost)
-            else:
-                # Fallback when all adjacent candidates are overloaded.
-                winner = min(gated_candidates, key=lambda i: (loads[i], i))
+            winner = min(gated_candidates, key=_cost)
             if edge not in assigned:
                 partitions[winner].add(edge)
                 assigned.add(edge)
@@ -271,8 +440,21 @@ def cne_partition(
     for u, v in graph.edges():
         eid = edge_id(u, v)
         if eid not in assigned:
-            min_idx = min(range(k), key=lambda i: sum(edge_load(graph, *e, weight) for e in partitions[i]))
-            partitions[min_idx].add(eid)
+            # Prefer an adjacent partition to preserve edge-connectivity.
+            adjacent_indices = [
+                i for i in range(k) if partitions[i] and any(nb in partitions[i] for nb in edge_adj[eid])
+            ]
+            if adjacent_indices:
+                target_idx = min(
+                    adjacent_indices,
+                    key=lambda i: sum(edge_load(graph, *e, weight) for e in partitions[i]),
+                )
+            else:
+                target_idx = min(
+                    range(k),
+                    key=lambda i: sum(edge_load(graph, *e, weight) for e in partitions[i]),
+                )
+            partitions[target_idx].add(eid)
             assigned.add(eid)
 
     for _ in range(refine_iterations):

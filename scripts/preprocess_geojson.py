@@ -143,8 +143,6 @@ def cluster_points(points_xy: List[Tuple[float, float]], eps: float) -> Dict[int
 def build_cluster_centroids(
     points_xy: List[Tuple[float, float]],
     point_to_cluster: Dict[int, int],
-    lon0: float,
-    lat0: float,
 ) -> Dict[int, Tuple[float, float]]:
     acc: Dict[int, Tuple[float, float, int]] = {}
     for i, (x, y) in enumerate(points_xy):
@@ -156,8 +154,7 @@ def build_cluster_centroids(
     for cid, (sx, sy, c) in acc.items():
         mx = sx / c
         my = sy / c
-        lon, lat = local_xy_to_lonlat(mx, my, lon0, lat0)
-        out[cid] = (lon, lat)
+        out[cid] = (mx, my)
     return out
 
 
@@ -260,6 +257,54 @@ def simplify_collinear_degree2_nodes(
     return sorted(edge_set)
 
 
+def largest_connected_component_nodes(
+    node_ids: Iterable[int],
+    edge_pairs: List[Tuple[int, int]],
+) -> set[int]:
+    """Return node ids in the largest connected component by node count."""
+    adj: Dict[int, set] = defaultdict(set)
+    for n in node_ids:
+        adj[n] = set()
+
+    for u, v in edge_pairs:
+        if u == v:
+            continue
+        adj[u].add(v)
+        adj[v].add(u)
+
+    visited = set()
+    best_component: List[int] = []
+
+    for start in sorted(adj):
+        if start in visited:
+            continue
+
+        stack = [start]
+        visited.add(start)
+        component: List[int] = []
+
+        while stack:
+            cur = stack.pop()
+            component.append(cur)
+            for nei in adj[cur]:
+                if nei in visited:
+                    continue
+                visited.add(nei)
+                stack.append(nei)
+
+        if not best_component:
+            best_component = component
+            continue
+
+        # Deterministic tie break: prefer smaller minimum node id.
+        if len(component) > len(best_component) or (
+            len(component) == len(best_component) and min(component) < min(best_component)
+        ):
+            best_component = component
+
+    return set(best_component)
+
+
 def write_nodes_csv(path: Path, cluster_centroids: Dict[int, Tuple[float, float]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -273,12 +318,13 @@ def write_edges_csv(
     path: Path,
     edge_pairs: List[Tuple[int, int]],
     node_xy: Dict[int, Tuple[float, float]],
+    weight_scale: float,
 ) -> None:
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["u", "v", "weight"])
         for u, v in edge_pairs:
-            w = segment_length_m(node_xy[u], node_xy[v])
+            w = segment_length_m(node_xy[u], node_xy[v]) / weight_scale
             writer.writerow([u, v, f"{w:.3f}"])
 
 
@@ -302,6 +348,24 @@ def main() -> None:
         default=30.0,
         help="Keep-node angle threshold in degrees for collinear simplification (180 +/- threshold)",
     )
+    parser.add_argument(
+        "--coord-unit",
+        choices=["lonlat", "m", "km"],
+        default="km",
+        help="Node coordinate unit in nodes.csv (default: km)",
+    )
+    parser.add_argument(
+        "--weight-unit",
+        choices=["m", "km"],
+        default="km",
+        help="Edge weight unit in edges.csv (default: km)",
+    )
+    parser.add_argument(
+        "--origin-mode",
+        choices=["center", "bottom-left"],
+        default="bottom-left",
+        help="Origin for metric node coordinates; ignored when coord-unit=lonlat",
+    )
     args = parser.parse_args()
 
     in_path = Path(args.input)
@@ -311,13 +375,9 @@ def main() -> None:
     features = read_linestring_features(in_path)
     points_xy, line_point_indices, lon0, lat0 = build_point_table(features)
     point_to_cluster = cluster_points(points_xy, args.eps_node)
-    cluster_centroids = build_cluster_centroids(points_xy, point_to_cluster, lon0, lat0)
+    cluster_xy = build_cluster_centroids(points_xy, point_to_cluster)
     edge_acc = build_collapsed_edges(points_xy, line_point_indices, point_to_cluster)
 
-    cluster_xy = {
-        cid: lonlat_to_local_xy(lon, lat, lon0, lat0)
-        for cid, (lon, lat) in cluster_centroids.items()
-    }
     collapsed_edge_pairs = sorted(edge_acc.keys())
     simplified_edge_pairs = simplify_collinear_degree2_nodes(
         cluster_xy,
@@ -325,16 +385,47 @@ def main() -> None:
         angle_threshold_deg=args.angle_threshold,
     )
 
+    largest_component_nodes = largest_connected_component_nodes(
+        cluster_xy.keys(),
+        simplified_edge_pairs,
+    )
+    filtered_edge_pairs = [
+        (u, v)
+        for u, v in simplified_edge_pairs
+        if u in largest_component_nodes and v in largest_component_nodes
+    ]
+    filtered_cluster_xy = {cid: cluster_xy[cid] for cid in largest_component_nodes}
+
+    metric_xy = filtered_cluster_xy
+    if args.coord_unit in {"m", "km"} and args.origin_mode == "bottom-left" and metric_xy:
+        min_x = min(x for x, _ in metric_xy.values())
+        min_y = min(y for _, y in metric_xy.values())
+        metric_xy = {cid: (x - min_x, y - min_y) for cid, (x, y) in metric_xy.items()}
+
+    if args.coord_unit == "lonlat":
+        output_nodes = {
+            cid: local_xy_to_lonlat(x, y, lon0, lat0)
+            for cid, (x, y) in filtered_cluster_xy.items()
+        }
+    elif args.coord_unit == "km":
+        output_nodes = {cid: (x / 1000.0, y / 1000.0) for cid, (x, y) in metric_xy.items()}
+    else:
+        output_nodes = metric_xy
+
+    weight_scale = 1000.0 if args.weight_unit == "km" else 1.0
+
     nodes_csv = out_dir / "nodes.csv"
     edges_csv = out_dir / "edges.csv"
-    write_nodes_csv(nodes_csv, cluster_centroids)
-    write_edges_csv(edges_csv, simplified_edge_pairs, cluster_xy)
+    write_nodes_csv(nodes_csv, output_nodes)
+    write_edges_csv(edges_csv, filtered_edge_pairs, cluster_xy, weight_scale)
 
     raw_points = len(points_xy)
-    merged_nodes = len(cluster_centroids)
+    merged_nodes = len(cluster_xy)
     raw_segments = sum(max(0, len(x) - 1) for x in line_point_indices)
     collapsed_edges = len(collapsed_edge_pairs)
     merged_edges = len(simplified_edge_pairs)
+    kept_nodes = len(largest_component_nodes)
+    kept_edges = len(filtered_edge_pairs)
 
     print("Preprocess done")
     print(f"input: {in_path}")
@@ -343,6 +434,10 @@ def main() -> None:
     print(f"raw points: {raw_points} -> merged nodes: {merged_nodes}")
     print(f"raw segments: {raw_segments} -> collapsed edges: {collapsed_edges}")
     print(f"after collinear simplify (deg=2): {merged_edges}")
+    print(f"kept largest component: nodes={kept_nodes}, edges={kept_edges}")
+    print(f"nodes.csv unit: {args.coord_unit}, edges.csv weight unit: {args.weight_unit}")
+    if args.coord_unit != "lonlat":
+        print(f"metric origin mode: {args.origin_mode}")
 
 
 if __name__ == "__main__":

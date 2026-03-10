@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 import matplotlib
 import matplotlib.patches as mpatches
@@ -48,6 +48,7 @@ def draw_partitioned_graph(
     show_edge_labels: bool = False,
     show_node_labels: bool = False,
     show_nodes: bool = False,
+    seed_centers: Optional[List[Tuple[float, float]]] = None,
     save_path: Optional[str] = None,
 ):
     """Draw partitioned graph where each partition has a distinct edge color."""
@@ -128,9 +129,39 @@ def draw_partitioned_graph(
     if show_node_labels:
         nx.draw_networkx_labels(graph, pos, font_size=8, font_color="white", font_weight="bold", ax=ax)
 
+    if seed_centers:
+        sx = [p[0] for p in seed_centers]
+        sy = [p[1] for p in seed_centers]
+        ax.scatter(
+            sx,
+            sy,
+            s=30,
+            marker="s",
+            c="black",
+            edgecolors="white",
+            linewidths=0.6,
+            zorder=6,
+            label="种子边中心",
+        )
+
     legend_handles = []
     for i, _ in enumerate(partitions):
         legend_handles.append(mpatches.Patch(color=colors[i], label=f"子图 {i}"))
+    if seed_centers:
+        legend_handles.append(
+            plt.Line2D(
+                [0],
+                [0],
+                marker="s",
+                color="w",
+                markerfacecolor="black",
+                markeredgecolor="white",
+                markeredgewidth=0.6,
+                markersize=6,
+                linestyle="None",
+                label="种子边中心",
+            )
+        )
 
     ax.legend(handles=legend_handles, loc="upper left", fontsize=9, framealpha=0.9, edgecolor="#cccccc")
     ax.axis("off")
