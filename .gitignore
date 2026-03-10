@@ -1,2 +1,5 @@
 __pycache__
 output
+*.egg-info/
+build/
+dist/

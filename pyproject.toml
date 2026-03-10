@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cne"
+version = "0.1.0"
+description = "NE-based road-network edge load-balanced partitioning"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "networkx>=3.0",
+  "matplotlib>=3.7",
+  "numpy>=1.24",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
