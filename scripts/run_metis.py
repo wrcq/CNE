@@ -99,7 +99,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run METIS edge-as-node baseline from external CSV road data")
     parser.add_argument("--nodes", default="dataset/processed/nodes.csv", help="Path to nodes.csv")
     parser.add_argument("--edges", default="dataset/processed/edges.csv", help="Path to edges.csv")
-    parser.add_argument("-k", type=int, default=4, help="Number of partitions")
+    parser.add_argument("-k", type=int, default=3, help="Number of partitions")
     parser.add_argument("--knn", type=int, default=8, help="k-NN size for edge-center proximity graph")
     parser.add_argument(
         "--show-edge-labels",

@@ -189,7 +189,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run CNE from external CSV road data")
     parser.add_argument("--nodes", default="dataset/processed/nodes.csv", help="Path to nodes.csv")
     parser.add_argument("--edges", default="dataset/processed/edges.csv", help="Path to edges.csv")
-    parser.add_argument("-k", type=int, default=4, help="Number of partitions")
+    parser.add_argument("-k", type=int, default=3, help="Number of partitions")
     parser.add_argument("--alpha", type=float, default=0.5, help="weight for scale/load term")
     parser.add_argument("--beta", type=float, default=0.5, help="weight for distance term")
     parser.add_argument(

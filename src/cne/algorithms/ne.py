@@ -2,12 +2,41 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import networkx as nx
 
-from cne.algorithms.cne import _build_edge_adjacency, _edges_connected, _select_seed_edges
+from cne.algorithms.cne import (
+    _build_edge_adjacency,
+    _edges_connected,
+    _resolve_node_positions,
+    _select_seed_edges,
+    _select_seed_edges_kmedoids,
+)
 from cne.utils.edge import edge_id, edge_load
+
+def _select_seed_edges_ne_by_strategy(
+    graph: nx.Graph,
+    edge_adj: Dict[frozenset, Set[frozenset]],
+    k: int,
+    weight: str,
+    seed_strategy: str,
+    seed_max_iter: int,
+) -> List[frozenset]:
+    key = seed_strategy.strip().lower()
+    if key in {"bfs", "bfs-dispersed", "dispersed"}:
+        return _select_seed_edges(graph, edge_adj, k, weight)
+    if key in {"kmedoids", "k-medoids"}:
+        positions = _resolve_node_positions(graph)
+        return _select_seed_edges_kmedoids(
+            graph,
+            edge_adj,
+            k,
+            positions,
+            weight,
+            max_iter=seed_max_iter,
+        )
+    raise ValueError(f"Unknown NE seed strategy: {seed_strategy}")
 
 
 def ne_partition(
@@ -16,6 +45,8 @@ def ne_partition(
     weight: str = "weight",
     seed_edges: Optional[List[Tuple]] = None,
     refine_iterations: int = 50,
+    seed_strategy: str = "bfs-dispersed",
+    seed_max_iter: int = 50,
 ) -> List[Set[frozenset]]:
     """Partition edges with single-source sequential expansion.
 
@@ -32,7 +63,14 @@ def ne_partition(
     if seed_edges is not None:
         seeds = [edge_id(u, v) for u, v in seed_edges]
     else:
-        seeds = _select_seed_edges(graph, edge_adj, k, weight)
+        seeds = _select_seed_edges_ne_by_strategy(
+            graph,
+            edge_adj,
+            k,
+            weight,
+            seed_strategy=seed_strategy,
+            seed_max_iter=seed_max_iter,
+        )
     assert len(seeds) == k, f"seed edge count ({len(seeds)}) must equal k ({k})"
 
     partitions: List[Set[frozenset]] = [set() for _ in range(k)]
@@ -99,28 +137,37 @@ def ne_partition(
         if not expanded_any:
             break
 
-    for u, v in graph.edges():
-        eid = edge_id(u, v)
-        if eid in assigned:
-            continue
+    # Iteratively absorb leftover edges via adjacency propagation.
+    pending = {edge_id(u, v) for u, v in graph.edges() if edge_id(u, v) not in assigned}
+    while pending:
+        progressed = False
 
-        # Prefer attaching to an adjacent partition so connectivity is preserved.
-        adjacent_indices = [
-            i for i in range(k) if partitions[i] and any(nb in partitions[i] for nb in edge_adj[eid])
-        ]
-        if adjacent_indices:
+        for eid in list(pending):
+            adjacent_indices = [
+                i for i in range(k) if partitions[i] and any(nb in partitions[i] for nb in edge_adj[eid])
+            ]
+            if not adjacent_indices:
+                # Keep it for the next round; it may become attachable later.
+                continue
+
             target_idx = min(
                 adjacent_indices,
                 key=lambda i: sum(edge_load(graph, *e, weight) for e in partitions[i]),
             )
-        else:
-            target_idx = min(
-                range(k),
-                key=lambda i: sum(edge_load(graph, *e, weight) for e in partitions[i]),
-            )
+            partitions[target_idx].add(eid)
+            assigned.add(eid)
+            pending.remove(eid)
+            progressed = True
 
-        partitions[target_idx].add(eid)
-        assigned.add(eid)
+        if not progressed:
+            # No pending edge can attach to existing partitions (disconnected case).
+            break
+
+    if pending:
+        raise RuntimeError(
+            "NE leftover assignment stalled: some edges cannot connect to any partition. "
+            f"pending_edges={len(pending)}"
+        )
 
     for _ in range(refine_iterations):
         loads = [sum(edge_load(graph, *e, weight) for e in partitions[i]) for i in range(k)]
