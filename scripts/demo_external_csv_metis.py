@@ -1,8 +1,11 @@
-"""Run pure k-medoids edge partitioning from external CSV road-network files.
+"""Run METIS baseline from external CSV road-network files.
 
-Expected files:
-- nodes.csv: node_id,x,y
-- edges.csv: u,v,weight
+Baseline design:
+- Treat each original edge as a node (represented by edge center).
+- Build a kNN proximity graph on edge centers.
+- Run METIS node partition and map labels back to edge partitions.
+
+This method does NOT enforce original-graph connectivity constraints.
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from cne.algorithms import kmedoids_partition_with_medoids
+from cne.algorithms import metis_edge_node_partition
 from cne.analysis import partition_stats
 from cne.viz import draw_partitioned_graph
 
@@ -52,28 +55,52 @@ def load_graph_from_csv(nodes_csv: Path, edges_csv: Path) -> tuple[nx.Graph, dic
     return graph, pos
 
 
+def representative_edges(
+    graph: nx.Graph,
+    partitions: list[set[frozenset]],
+) -> list[frozenset]:
+    """Choose one actual representative edge per partition by intra-part center-distance."""
+    def edge_center(e: frozenset) -> tuple[float, float]:
+        u, v = tuple(e)
+        pu = graph.nodes[u]["pos"]
+        pv = graph.nodes[v]["pos"]
+        return ((float(pu[0]) + float(pv[0])) * 0.5, (float(pu[1]) + float(pv[1])) * 0.5)
+
+    out: list[frozenset] = []
+    for part in partitions:
+        if not part:
+            continue
+        centers = {e: edge_center(e) for e in part}
+        best = min(
+            part,
+            key=lambda e: sum(
+                ((centers[e][0] - centers[o][0]) ** 2 + (centers[e][1] - centers[o][1]) ** 2) ** 0.5
+                for o in part
+            ),
+        )
+        out.append(best)
+    return out
+
+
 def centers_from_edges(
     graph: nx.Graph,
     edges: list[frozenset],
 ) -> list[tuple[float, float]]:
-    """Return center points for actual representative edges."""
     out: list[tuple[float, float]] = []
     for e in edges:
         u, v = tuple(e)
         pu = graph.nodes[u]["pos"]
         pv = graph.nodes[v]["pos"]
-        cx = (float(pu[0]) + float(pv[0])) * 0.5
-        cy = (float(pu[1]) + float(pv[1])) * 0.5
-        out.append((cx, cy))
+        out.append(((float(pu[0]) + float(pv[0])) * 0.5, (float(pu[1]) + float(pv[1])) * 0.5))
     return out
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run pure k-medoids from external CSV road data")
+    parser = argparse.ArgumentParser(description="Run METIS edge-as-node baseline from external CSV road data")
     parser.add_argument("--nodes", default="dataset/processed/nodes.csv", help="Path to nodes.csv")
     parser.add_argument("--edges", default="dataset/processed/edges.csv", help="Path to edges.csv")
-    parser.add_argument("-k", type=int, default=4, help="Number of clusters")
-    parser.add_argument("--max-iter", type=int, default=20, help="k-medoids max iterations")
+    parser.add_argument("-k", type=int, default=4, help="Number of partitions")
+    parser.add_argument("--knn", type=int, default=8, help="k-NN size for edge-center proximity graph")
     parser.add_argument(
         "--show-edge-labels",
         action="store_true",
@@ -84,40 +111,46 @@ def main() -> None:
     nodes_csv = ROOT / args.nodes
     edges_csv = ROOT / args.edges
 
-
     start = time.time()
-
     graph, pos = load_graph_from_csv(nodes_csv, edges_csv)
-    partitions, medoid_edges = kmedoids_partition_with_medoids(
-        graph,
-        k=args.k,
-        max_iter=args.max_iter,
-    )
+
+    try:
+        partitions = metis_edge_node_partition(
+            graph,
+            k=args.k,
+            knn=args.knn,
+        )
+    except RuntimeError as exc:
+        print("METIS 运行失败:")
+        print(exc)
+        print("Windows 提示: 需要安装 METIS 原生库，并设置环境变量 METIS_DLL 指向 metis.dll。")
+        return
 
     stats = partition_stats(graph, partitions)
-    centers = centers_from_edges(graph, medoid_edges)
+    reps = representative_edges(graph, partitions)
+    centers = centers_from_edges(graph, reps)
 
     print("=" * 65)
-    print("外部 CSV 路网 K-Medoids 边聚类结果")
+    print("外部 CSV 路网 METIS 基准结果 (edge-as-node)")
     print("=" * 65)
     print(f"节点数: {graph.number_of_nodes()}, 边数: {graph.number_of_edges()}")
-    print(f"参数: k={args.k}, max_iter={args.max_iter}")
+    print(f"参数: k={args.k}, knn={args.knn}")
     print(f"各子图边数: {stats['edge_counts']}")
     print(f"各子图负载: {[f'{x:.1f}' for x in stats['loads']]}")
     print(f"不均衡度: {stats['max_imbalance']:.2%}, 共享节点: {stats['shared_nodes']}")
-    if medoid_edges:
-        print("代表边(最终 medoids):")
-        for i, e in enumerate(medoid_edges):
+    if reps:
+        print("代表边(每个分区一条实际边):")
+        for i, e in enumerate(reps):
             u, v = sorted(tuple(e))
-            print(f"  medoid[{i}] edge=({u},{v})")
+            print(f"  rep[{i}] edge=({u},{v})")
 
-    out_img = OUTPUT_DIR / f"external_kmedoids_k{args.k}.png"
+    out_img = OUTPUT_DIR / f"external_metis_k{args.k}.png"
     draw_partitioned_graph(
         graph,
         partitions,
         pos=pos,
         seed_centers=centers,
-        title=f"外部路网 K-Medoids 边聚类 (K={args.k})",
+        title=f"外部路网 METIS 基准 (K={args.k}, kNN={args.knn})",
         show_edge_labels=args.show_edge_labels,
         save_path=os.path.join(str(OUTPUT_DIR), out_img.name),
     )

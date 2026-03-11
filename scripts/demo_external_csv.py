@@ -13,6 +13,7 @@ import math
 import os
 import sys
 from pathlib import Path
+import time
 
 import networkx as nx
 
@@ -58,6 +59,7 @@ def compute_seed_centers(
     graph: nx.Graph,
     k: int,
     seed_strategy: str,
+    seed_max_iter: int,
     weight: str = "weight",
 ) -> list[tuple[int, int, float, float]]:
     """Compute seed edges used by CNE and return their center coordinates."""
@@ -75,6 +77,7 @@ def compute_seed_centers(
         weight,
         strategy=seed_strategy,
         positions=pos,
+        seed_max_iter=seed_max_iter,
     )
 
     out: list[tuple[int, int, float, float]] = []
@@ -104,6 +107,7 @@ def compute_partition_cost_terms(
     alpha: float,
     beta: float,
     seed_strategy: str,
+    seed_max_iter: int,
     weight: str = "weight",
 ) -> dict:
     """Compute post-hoc CNE-like scale/dist/total cost terms per partition."""
@@ -126,6 +130,7 @@ def compute_partition_cost_terms(
         weight,
         strategy=seed_strategy,
         positions=pos,
+        seed_max_iter=seed_max_iter,
     )
     seed_centers = [_edge_center_from_pos(graph, se) for se in seed_edges]
 
@@ -185,12 +190,12 @@ def main() -> None:
     parser.add_argument("--nodes", default="dataset/processed/nodes.csv", help="Path to nodes.csv")
     parser.add_argument("--edges", default="dataset/processed/edges.csv", help="Path to edges.csv")
     parser.add_argument("-k", type=int, default=4, help="Number of partitions")
-    parser.add_argument("--alpha", type=float, default=1.0, help="weight for scale/load term")
-    parser.add_argument("--beta", type=float, default=1.0, help="weight for distance term")
+    parser.add_argument("--alpha", type=float, default=0.5, help="weight for scale/load term")
+    parser.add_argument("--beta", type=float, default=0.5, help="weight for distance term")
     parser.add_argument(
         "--overload-threshold",
         type=float,
-        default=1.0,
+        default=1.05,
         help="relative load intensity threshold for gating overloaded partitions",
     )
     parser.add_argument(
@@ -204,13 +209,31 @@ def main() -> None:
         default="k-medoids",
         help="Seed edge selection strategy",
     )
+    parser.add_argument(
+        "--seed-max-iter",
+        type=int,
+        default=50,
+        help="Max k-medoids iterations for seed selection",
+    )
+    parser.add_argument(
+        "--refine-iterations",
+        type=int,
+        default=5,
+        help="Number of refinement iterations",
+    )
     args = parser.parse_args()
 
     nodes_csv = ROOT / args.nodes
     edges_csv = ROOT / args.edges
 
+    start = time.time()
     graph, pos = load_graph_from_csv(nodes_csv, edges_csv)
-    seed_centers = compute_seed_centers(graph, args.k, seed_strategy=args.seed_strategy)
+    seed_centers = compute_seed_centers(
+        graph,
+        args.k,
+        seed_strategy=args.seed_strategy,
+        seed_max_iter=args.seed_max_iter,
+    )
     partitions = cne_partition(
         graph,
         k=args.k,
@@ -218,6 +241,7 @@ def main() -> None:
         beta=args.beta,
         overload_threshold=args.overload_threshold,
         seed_strategy=args.seed_strategy,
+        seed_max_iter=args.seed_max_iter,
     )
 
     stats = partition_stats(graph, partitions)
@@ -228,14 +252,18 @@ def main() -> None:
         alpha=args.alpha,
         beta=args.beta,
         seed_strategy=args.seed_strategy,
+        seed_max_iter=args.seed_max_iter,
     )
+    
+    
+
     print("=" * 65)
     print("外部 CSV 路网 CNE 分区结果")
     print("=" * 65)
     print(f"节点数: {graph.number_of_nodes()}, 边数: {graph.number_of_edges()}")
     print(
         f"参数: k={args.k}, alpha={args.alpha}, beta={args.beta}, "
-        f"lambda={args.overload_threshold}, seed={args.seed_strategy}"
+        f"lambda={args.overload_threshold}, seed={args.seed_strategy}, seed_iter={args.seed_max_iter}"
     )
     print(f"各子图边数: {stats['edge_counts']}")
     print(f"各子图负载: {[f'{x:.1f}' for x in stats['loads']]}")
@@ -262,7 +290,8 @@ def main() -> None:
         show_edge_labels=args.show_edge_labels,
         save_path=os.path.join(str(OUTPUT_DIR), out_img.name),
     )
-
+    end = time.time()
+    print(f"运行时间: {end - start:.2f} 秒")
 
 if __name__ == "__main__":
     main()

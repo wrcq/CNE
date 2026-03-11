@@ -12,6 +12,7 @@ import csv
 import os
 import sys
 from pathlib import Path
+import time
 
 import networkx as nx
 
@@ -98,6 +99,8 @@ def main() -> None:
     nodes_csv = ROOT / args.nodes
     edges_csv = ROOT / args.edges
 
+    start = time.time()
+
     graph, pos = load_graph_from_csv(nodes_csv, edges_csv)
     seed_edges = select_seed_edges(graph, args.k)
     seed_centers = seed_centers_from_edges(graph, seed_edges)
@@ -132,6 +135,8 @@ def main() -> None:
         show_edge_labels=args.show_edge_labels,
         save_path=os.path.join(str(OUTPUT_DIR), out_img.name),
     )
+    end = time.time()
+    print(f"运行时间: {end - start:.2f} 秒")
 
 
 if __name__ == "__main__":

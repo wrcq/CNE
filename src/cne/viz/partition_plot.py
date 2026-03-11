@@ -141,7 +141,7 @@ def draw_partitioned_graph(
             edgecolors="white",
             linewidths=0.6,
             zorder=6,
-            label="种子边中心",
+            label="代表边中心",
         )
 
     legend_handles = []
@@ -159,7 +159,7 @@ def draw_partitioned_graph(
                 markeredgewidth=0.6,
                 markersize=6,
                 linestyle="None",
-                label="种子边中心",
+                label="代表边中心",
             )
         )
 

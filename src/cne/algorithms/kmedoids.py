@@ -51,15 +51,15 @@ def _edge_sort_key(edge: frozenset) -> Tuple[Any, ...]:
     return tuple(sorted(edge))
 
 
-def kmedoids_partition(
+def _kmedoids_partition_core(
     graph: nx.Graph,
     k: int,
-    max_iter: int = 50,
-) -> List[Set[frozenset]]:
-    """Partition edges with pure k-medoids on edge-center Euclidean distance."""
+    max_iter: int,
+) -> Tuple[List[Set[frozenset]], List[frozenset]]:
+    """Internal k-medoids routine returning both partitions and final medoid edges."""
     n_edges = graph.number_of_edges()
     if n_edges == 0:
-        return [set() for _ in range(k)]
+        return [set() for _ in range(k)], []
 
     k = min(k, n_edges)
     positions = _resolve_node_positions(graph)
@@ -124,4 +124,23 @@ def kmedoids_partition(
         idx = min(range(k), key=lambda i: (dist(e, medoids[i]), _edge_sort_key(medoids[i])))
         partitions[idx].add(e)
 
+    return partitions, medoids
+
+
+def kmedoids_partition(
+    graph: nx.Graph,
+    k: int,
+    max_iter: int = 50,
+) -> List[Set[frozenset]]:
+    """Partition edges with pure k-medoids on edge-center Euclidean distance."""
+    partitions, _ = _kmedoids_partition_core(graph, k, max_iter)
     return partitions
+
+
+def kmedoids_partition_with_medoids(
+    graph: nx.Graph,
+    k: int,
+    max_iter: int = 50,
+) -> Tuple[List[Set[frozenset]], List[frozenset]]:
+    """Return both k-medoids edge partitions and final medoid edges."""
+    return _kmedoids_partition_core(graph, k, max_iter)

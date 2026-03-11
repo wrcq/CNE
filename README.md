@@ -50,6 +50,7 @@ Run external CSV demos:
 python scripts/demo_external_csv.py -k 4 --alpha 0.8 --beta 0.2 --seed-strategy k-medoids --overload-threshold 1.0
 python scripts/demo_external_csv_ne.py -k 4
 python scripts/demo_external_csv_kmedoids.py -k 4 --max-iter 50
+python scripts/demo_external_csv_metis.py -k 4 --knn 8
 ```
 
 Notes:
@@ -57,6 +58,8 @@ Notes:
 - `demo_external_csv_kmedoids.py` is a pure edge clustering baseline.
 - It clusters by edge-center Euclidean distance only.
 - It does not enforce partition connectivity.
+- `demo_external_csv_metis.py` is a METIS node-partition baseline over edge-center kNN graph.
+- On Windows, `python-metis` needs METIS native library and `METIS_DLL` set to `metis.dll` path.
 
 ## Core API
 
@@ -71,6 +74,7 @@ Available partition APIs:
 - `cne_partition(graph, k, weight="weight", seed_edges=None, refine_iterations=50, alpha=1.0, beta=1.0, overload_threshold=1.2, seed_strategy="k-medoids")`
 - `ne_partition(graph, k, weight="weight", seed_edges=None, refine_iterations=50)`
 - `kmedoids_partition(graph, k, max_iter=50)`
+- `metis_edge_node_partition(graph, k, knn=8)`
 
 Behavior:
 

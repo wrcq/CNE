@@ -224,13 +224,21 @@ def _select_seed_edges_by_strategy(
     weight: str,
     strategy: str,
     positions: Dict[Any, Tuple[float, float]],
+    seed_max_iter: int = 50,
 ) -> List[frozenset]:
     """Select seed edges according to configured strategy."""
     key = strategy.strip().lower()
     if key in {"bfs", "bfs-dispersed", "dispersed"}:
         return _select_seed_edges(graph, edge_adj, k, weight)
     if key in {"kmedoids", "k-medoids"}:
-        return _select_seed_edges_kmedoids(graph, edge_adj, k, positions, weight)
+        return _select_seed_edges_kmedoids(
+            graph,
+            edge_adj,
+            k,
+            positions,
+            weight,
+            max_iter=seed_max_iter,
+        )
     raise ValueError(f"Unknown seed strategy: {strategy}")
 
 
@@ -293,11 +301,12 @@ def cne_partition(
     k: int,
     weight: str = "weight",
     seed_edges: Optional[List[Tuple]] = None,
-    refine_iterations: int = 50,
+    refine_iterations: int = 5,
     alpha: float = 1.0,
     beta: float = 1.0,
-    overload_threshold: float = 1.2,
+    overload_threshold: float = 1.05,
     seed_strategy: str = "k-medoids",
+    seed_max_iter: int = 50,
 ) -> List[Set[frozenset]]:
     """Partition edges into k balanced connected groups using competitive CNE expansion.
 
@@ -326,6 +335,7 @@ def cne_partition(
             weight,
             strategy=seed_strategy,
             positions=positions,
+            seed_max_iter=seed_max_iter,
         )
     assert len(seeds) == k, f"seed edge count ({len(seeds)}) must equal k ({k})"
 
