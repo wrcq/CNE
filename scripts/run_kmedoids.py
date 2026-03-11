@@ -105,6 +105,8 @@ def main() -> None:
     print(f"各子图边数: {stats['edge_counts']}")
     print(f"各子图负载: {[f'{x:.1f}' for x in stats['loads']]}")
     print(f"不均衡度: {stats['max_imbalance']:.2%}, 共享节点: {stats['shared_nodes']}")
+    print(f"各子图紧凑度: {[f'{x:.4f}' for x in stats['compactness_per_partition']]}")
+    print(f"平均紧凑度: {stats['compactness_mean']:.4f} (method={stats['compactness_method']})")
     if medoid_edges:
         print("代表边(最终 medoids):")
         for i, e in enumerate(medoid_edges):
@@ -117,7 +119,7 @@ def main() -> None:
         partitions,
         pos=pos,
         seed_centers=centers,
-        title=f"外部路网 K-Medoids 边聚类 (K={args.k})",
+        title=f"Case1: K-Medoids",
         show_edge_labels=args.show_edge_labels,
         save_path=os.path.join(str(OUTPUT_DIR), out_img.name),
     )

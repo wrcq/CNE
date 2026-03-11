@@ -35,6 +35,9 @@ _COLORS = [
     "#a9a9a9",
 ]
 
+_TITLE_FONTSIZE = 25
+_LEGEND_FONTSIZE = 18
+
 
 def draw_partitioned_graph(
     graph: nx.Graph,
@@ -49,6 +52,7 @@ def draw_partitioned_graph(
     show_node_labels: bool = False,
     show_nodes: bool = False,
     seed_centers: Optional[List[Tuple[float, float]]] = None,
+    show_axes: bool = True,
     save_path: Optional[str] = None,
 ):
     """Draw partitioned graph where each partition has a distinct edge color."""
@@ -70,7 +74,7 @@ def draw_partitioned_graph(
         pos = nx.spring_layout(graph, seed=42, k=1.5 / (graph.number_of_nodes() ** 0.5))
 
     fig, ax = plt.subplots(1, 1, figsize=figsize)
-    ax.set_title(title, fontsize=16, fontweight="bold")
+    ax.set_title(title, fontsize=_TITLE_FONTSIZE, fontweight="bold")
 
     for u, v, data in graph.edges(data=True):
         w = data.get(weight, 1.0)
@@ -93,7 +97,7 @@ def draw_partitioned_graph(
                 mid_x,
                 mid_y,
                 f"{w:.1f}",
-                fontsize=7,
+                fontsize=_LEGEND_FONTSIZE,
                 ha="center",
                 va="center",
                 bbox={"boxstyle": "round,pad=0.15", "facecolor": "white", "edgecolor": "none", "alpha": 0.75},
@@ -127,44 +131,52 @@ def draw_partitioned_graph(
                     ax.add_patch(wedge)
 
     if show_node_labels:
-        nx.draw_networkx_labels(graph, pos, font_size=8, font_color="white", font_weight="bold", ax=ax)
+        nx.draw_networkx_labels(graph, pos, font_size=_LEGEND_FONTSIZE, font_color="white", font_weight="bold", ax=ax)
 
-    if seed_centers:
-        sx = [p[0] for p in seed_centers]
-        sy = [p[1] for p in seed_centers]
-        ax.scatter(
-            sx,
-            sy,
-            s=30,
-            marker="s",
-            c="black",
-            edgecolors="white",
-            linewidths=0.6,
-            zorder=6,
-            label="代表边中心",
-        )
+    # if seed_centers:
+    #     sx = [p[0] for p in seed_centers]
+    #     sy = [p[1] for p in seed_centers]
+    #     ax.scatter(
+    #         sx,
+    #         sy,
+    #         s=30,
+    #         marker="s",
+    #         c="black",
+    #         edgecolors="white",
+    #         linewidths=0.6,
+    #         zorder=6,
+    #         label="种子边中心",
+    #     )
 
     legend_handles = []
     for i, _ in enumerate(partitions):
-        legend_handles.append(mpatches.Patch(color=colors[i], label=f"子图 {i}"))
-    if seed_centers:
-        legend_handles.append(
-            plt.Line2D(
-                [0],
-                [0],
-                marker="s",
-                color="w",
-                markerfacecolor="black",
-                markeredgecolor="white",
-                markeredgewidth=0.6,
-                markersize=6,
-                linestyle="None",
-                label="代表边中心",
-            )
-        )
+        legend_handles.append(mpatches.Patch(color=colors[i], label=f"子图 {i+1}"))
+    # if seed_centers:
+    #     legend_handles.append(
+    #         plt.Line2D(
+    #             [0],
+    #             [0],
+    #             marker="s",
+    #             color="w",
+    #             markerfacecolor="black",
+    #             markeredgecolor="white",
+    #             markeredgewidth=0.6,
+    #             markersize=6,
+    #             linestyle="None",
+    #             label="种子边中心",
+    #         )
+    #     )
 
-    ax.legend(handles=legend_handles, loc="upper left", fontsize=9, framealpha=0.9, edgecolor="#cccccc")
-    ax.axis("off")
+    ax.legend(handles=legend_handles, loc="upper right", fontsize=_LEGEND_FONTSIZE, framealpha=0.9, edgecolor="#cccccc")
+
+    if show_axes:
+        ax.set_xlabel("X-axis", fontsize=_LEGEND_FONTSIZE)
+        ax.set_ylabel("Y-axis", fontsize=_LEGEND_FONTSIZE)
+        ax.tick_params(axis="both", labelsize=_LEGEND_FONTSIZE)
+        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.25)
+    else:
+        ax.axis("off")
+
     plt.tight_layout()
 
     if save_path:

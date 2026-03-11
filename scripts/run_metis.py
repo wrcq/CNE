@@ -31,6 +31,22 @@ from cne.analysis import partition_stats
 from cne.viz import draw_partitioned_graph
 
 
+def ensure_metis_dll() -> None:
+    """Best-effort METIS DLL discovery for Windows local runs."""
+    existing = os.environ.get("METIS_DLL")
+    if existing and Path(existing).is_file():
+        return
+
+    candidates = [
+        ROOT / ".venv" / "Lib" / "site-packages" / "metis.dll",
+        ROOT / "metis.dll",
+    ]
+    for dll in candidates:
+        if dll.is_file():
+            os.environ["METIS_DLL"] = str(dll)
+            return
+
+
 def load_graph_from_csv(nodes_csv: Path, edges_csv: Path) -> tuple[nx.Graph, dict]:
     graph = nx.Graph()
     pos = {}
@@ -108,6 +124,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    ensure_metis_dll()
+
     nodes_csv = ROOT / args.nodes
     edges_csv = ROOT / args.edges
 
@@ -138,6 +156,8 @@ def main() -> None:
     print(f"各子图边数: {stats['edge_counts']}")
     print(f"各子图负载: {[f'{x:.1f}' for x in stats['loads']]}")
     print(f"不均衡度: {stats['max_imbalance']:.2%}, 共享节点: {stats['shared_nodes']}")
+    print(f"各子图紧凑度: {[f'{x:.4f}' for x in stats['compactness_per_partition']]}")
+    print(f"平均紧凑度: {stats['compactness_mean']:.4f} (method={stats['compactness_method']})")
     if reps:
         print("代表边(每个分区一条实际边):")
         for i, e in enumerate(reps):
@@ -150,7 +170,7 @@ def main() -> None:
         partitions,
         pos=pos,
         seed_centers=centers,
-        title=f"外部路网 METIS 基准 (K={args.k}, kNN={args.knn})",
+        title=f"Case1: METIS",
         show_edge_labels=args.show_edge_labels,
         save_path=os.path.join(str(OUTPUT_DIR), out_img.name),
     )

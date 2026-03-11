@@ -3,3 +3,4 @@ output
 *.egg-info/
 build/
 dist/
+scripts/run_metis.py

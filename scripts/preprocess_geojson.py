@@ -339,13 +339,13 @@ def main() -> None:
     parser.add_argument(
         "--eps-node",
         type=float,
-        default=60.0,
+        default=50.0,
         help="Node merge radius in meters (default 60 for very aggressive consolidation)",
     )
     parser.add_argument(
         "--angle-threshold",
         type=float,
-        default=30.0,
+        default=15.0,
         help="Keep-node angle threshold in degrees for collinear simplification (180 +/- threshold)",
     )
     parser.add_argument(

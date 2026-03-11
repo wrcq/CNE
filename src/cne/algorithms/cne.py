@@ -447,25 +447,37 @@ def cne_partition(
         if not expanded_this_round:
             break
 
-    for u, v in graph.edges():
-        eid = edge_id(u, v)
-        if eid not in assigned:
-            # Prefer an adjacent partition to preserve edge-connectivity.
+    # Iteratively absorb leftover edges via adjacency propagation.
+    pending = {edge_id(u, v) for u, v in graph.edges() if edge_id(u, v) not in assigned}
+    while pending:
+        progressed = False
+
+        for eid in list(pending):
             adjacent_indices = [
                 i for i in range(k) if partitions[i] and any(nb in partitions[i] for nb in edge_adj[eid])
             ]
-            if adjacent_indices:
-                target_idx = min(
-                    adjacent_indices,
-                    key=lambda i: sum(edge_load(graph, *e, weight) for e in partitions[i]),
-                )
-            else:
-                target_idx = min(
-                    range(k),
-                    key=lambda i: sum(edge_load(graph, *e, weight) for e in partitions[i]),
-                )
+            if not adjacent_indices:
+                # Keep it for the next round; it may become attachable later.
+                continue
+
+            target_idx = min(
+                adjacent_indices,
+                key=lambda i: sum(edge_load(graph, *e, weight) for e in partitions[i]),
+            )
             partitions[target_idx].add(eid)
             assigned.add(eid)
+            pending.remove(eid)
+            progressed = True
+
+        if not progressed:
+            # No pending edge can attach to existing partitions (disconnected case).
+            break
+
+    if pending:
+        raise RuntimeError(
+            "CNE leftover assignment stalled: some edges cannot connect to any partition. "
+            f"pending_edges={len(pending)}"
+        )
 
     for _ in range(refine_iterations):
         loads = [sum(edge_load(graph, *e, weight) for e in partitions[i]) for i in range(k)]

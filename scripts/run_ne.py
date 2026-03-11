@@ -120,7 +120,7 @@ def main() -> None:
     parser.add_argument(
         "--seed-strategy",
         choices=["bfs-dispersed", "k-medoids"],
-        default="bfs-dispersed",
+        default="k-medoids",
         help="NE seed edge selection strategy",
     )
     parser.add_argument(
@@ -162,6 +162,8 @@ def main() -> None:
     print(f"各子图边数: {stats['edge_counts']}")
     print(f"各子图负载: {[f'{x:.1f}' for x in stats['loads']]}")
     print(f"不均衡度: {stats['max_imbalance']:.2%}, 共享节点: {stats['shared_nodes']}")
+    print(f"各子图紧凑度: {[f'{x:.4f}' for x in stats['compactness_per_partition']]}")
+    print(f"平均紧凑度: {stats['compactness_mean']:.4f} (method={stats['compactness_method']})")
     if seed_centers:
         print("种子点(由 seed edge 中点计算):")
         for i, (u, v, cx, cy) in enumerate(seed_centers):
@@ -173,7 +175,7 @@ def main() -> None:
         partitions,
         pos=pos,
         seed_centers=[(cx, cy) for _, _, cx, cy in seed_centers],
-        title=f"外部路网 NE 分区 (K={args.k}, seed={args.seed_strategy})",
+        title=f"Case1: NE",
         show_edge_labels=args.show_edge_labels,
         save_path=os.path.join(str(OUTPUT_DIR), out_img.name),
     )

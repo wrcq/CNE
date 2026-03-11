@@ -272,6 +272,8 @@ def main() -> None:
     print(f"各子图总代价 J_total: {[f'{x:.3f}' for x in cost_terms['total_cost']]}")
     print(f"平均总代价: {cost_terms['mean_total_cost']:.3f}")
     print(f"不均衡度: {stats['max_imbalance']:.2%}, 共享节点: {stats['shared_nodes']}")
+    print(f"各子图紧凑度: {[f'{x:.4f}' for x in stats['compactness_per_partition']]}")
+    print(f"平均紧凑度: {stats['compactness_mean']:.4f} (method={stats['compactness_method']})")
     if seed_centers:
         print("种子点(由 seed edge 中点计算):")
         for i, (u, v, cx, cy) in enumerate(seed_centers):
@@ -284,8 +286,7 @@ def main() -> None:
         pos=pos,
         seed_centers=[(cx, cy) for _, _, cx, cy in seed_centers],
         title=(
-            f"外部路网 CNE 分区 (K={args.k}, a={args.alpha}, "
-            f"b={args.beta}, l={args.overload_threshold})"
+            f"case1: CNE"
         ),
         show_edge_labels=args.show_edge_labels,
         save_path=os.path.join(str(OUTPUT_DIR), out_img.name),
