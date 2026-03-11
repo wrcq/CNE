@@ -25,7 +25,8 @@ def _select_seed_edges_ne_by_strategy(
 ) -> List[frozenset]:
     key = seed_strategy.strip().lower()
     if key in {"bfs", "bfs-dispersed", "dispersed"}:
-        return _select_seed_edges(graph, edge_adj, k, weight)
+        positions = _resolve_node_positions(graph)
+        return _select_seed_edges(graph, edge_adj, k, positions, weight)
     if key in {"kmedoids", "k-medoids"}:
         positions = _resolve_node_positions(graph)
         return _select_seed_edges_kmedoids(

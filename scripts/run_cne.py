@@ -195,7 +195,7 @@ def main() -> None:
     parser.add_argument(
         "--overload-threshold",
         type=float,
-        default=1.05,
+        default=1.0,
         help="relative load intensity threshold for gating overloaded partitions",
     )
     parser.add_argument(

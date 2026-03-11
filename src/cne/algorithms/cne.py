@@ -38,41 +38,28 @@ def _select_seed_edges(
     graph: nx.Graph,
     edge_adj: Dict[frozenset, Set[frozenset]],
     k: int,
+    positions: Dict[Any, Tuple[float, float]],
     weight: str,
 ) -> List[frozenset]:
-    """Greedily pick k dispersed seed edges using BFS distance in edge-adjacency graph."""
+    """Greedily pick k dispersed seed edges using Euclidean center distance."""
     all_edges = list(edge_adj.keys())
     if k >= len(all_edges):
         return all_edges[:k]
 
-    def bfs_dist(start: frozenset, target: frozenset) -> int:
-        if start == target:
-            return 0
-        visited = {start}
-        queue = [start]
-        dist = 0
-        while queue:
-            dist += 1
-            next_queue = []
-            for e in queue:
-                for nb in edge_adj[e]:
-                    if nb == target:
-                        return dist
-                    if nb not in visited:
-                        visited.add(nb)
-                        next_queue.append(nb)
-            queue = next_queue
-        return float("inf")
+    edge_centers = {eid: _edge_center(eid, positions) for eid in all_edges}
+
+    def center_dist(e1: frozenset, e2: frozenset) -> float:
+        return _euclidean(edge_centers[e1], edge_centers[e2])
 
     seeds: List[frozenset] = [max(all_edges, key=lambda e: edge_load(graph, *e, weight))]
 
     while len(seeds) < k:
         best_edge = None
-        best_min_dist = -1
+        best_min_dist = -1.0
         for e in all_edges:
             if e in seeds:
                 continue
-            min_d = min(bfs_dist(e, s) for s in seeds)
+            min_d = min(center_dist(e, s) for s in seeds)
             if min_d > best_min_dist:
                 best_min_dist = min_d
                 best_edge = e
@@ -229,7 +216,7 @@ def _select_seed_edges_by_strategy(
     """Select seed edges according to configured strategy."""
     key = strategy.strip().lower()
     if key in {"bfs", "bfs-dispersed", "dispersed"}:
-        return _select_seed_edges(graph, edge_adj, k, weight)
+        return _select_seed_edges(graph, edge_adj, k, positions, weight)
     if key in {"kmedoids", "k-medoids"}:
         return _select_seed_edges_kmedoids(
             graph,

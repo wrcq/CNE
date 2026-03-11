@@ -74,7 +74,8 @@ def select_seed_edges(
     key = seed_strategy.strip().lower()
 
     if key in {"bfs", "bfs-dispersed", "dispersed"}:
-        seed_edges = _select_seed_edges(graph, edge_adj, k_eff, weight)
+        positions = _resolve_node_positions(graph)
+        seed_edges = _select_seed_edges(graph, edge_adj, k_eff, positions, weight)
     elif key in {"kmedoids", "k-medoids"}:
         positions = _resolve_node_positions(graph)
         seed_edges = _select_seed_edges_kmedoids(

@@ -139,7 +139,7 @@ def draw_partitioned_graph(
     #     ax.scatter(
     #         sx,
     #         sy,
-    #         s=30,
+    #         s=90,
     #         marker="s",
     #         c="black",
     #         edgecolors="white",
